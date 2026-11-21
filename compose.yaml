@@ -3,13 +3,21 @@ services:
     build: ./backend
     ports:
       - "127.0.0.1:8001:8000"
+    environment:
+      PGHOST: db
+      PGDATABASE: docverify
+      PGUSER: docverify
+      PGPASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:16
     environment:
       POSTGRES_DB: docverify
       POSTGRES_USER: docverify
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
