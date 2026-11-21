@@ -1,7 +1,11 @@
+from .registration import router as registration_router
+
+
 import psycopg
 from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="DocVerify AI")
+app.include_router(registration_router)
 
 
 @app.get("/api/health")
