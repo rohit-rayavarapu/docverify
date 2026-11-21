@@ -26,7 +26,6 @@ jobs:
 
       - name: Build backend Docker image
         working-directory: .
-        run: docker compose build backend
         env:
           POSTGRES_PASSWORD: ci-build-only
         run: docker compose build backend
