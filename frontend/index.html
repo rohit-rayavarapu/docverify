@@ -29,6 +29,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:.75rem .
 @media(max-width:48rem){#applicant-documents{grid-template-columns:1fr}#review-queue li{align-items:flex-start;flex-direction:column}.actions{flex-shrink:1}}
 @media(max-width:30rem){main,.bar{width:calc(100% - 1.25rem)}li{flex-wrap:wrap}.actions{gap:.4rem}.actions button{padding:.5rem .7rem}td,th{padding:.6rem .2rem}table{font-size:.9rem}}
 
+select,textarea{font:inherit;color:inherit;width:100%;min-width:0;padding:.65rem .8rem;border:1px solid #91a9a5;border-radius:.55rem;background:white}textarea{resize:vertical}
 </style>
 <script defer src="/app.js"></script>
 </head>
@@ -59,8 +60,13 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:.75rem .
 <section id="applicant-documents" hidden>
 <div class="card"><h2>My documents</h2><ul id="document-list"></ul><p id="list-message" role="status"></p></div>
 <div class="card upload"><h2>Upload a document</h2><form id="upload-form">
-<label>PDF file<input id="pdf-file" type="file" accept=".pdf,application/pdf" aria-describedby="file-help" required></label>
-<small id="file-help">Maximum file size: 5 MiB.</small><button id="upload-button">Upload PDF</button><p id="upload-message" role="status"></p>
+<label>Application name<input id="application-title" list="known-applications" maxlength="120" required aria-describedby="application-help"></label>
+<datalist id="known-applications"></datalist>
+<small id="application-help">Use the same application name to group documents. Upload one document at a time.</small>
+<label>Document type<select id="document-type" required><option value="">Choose a type</option><option>Transcript</option><option>Degree certificate</option><option>Language certificate</option><option>Other</option></select></label>
+<label>Notes (optional)<textarea id="document-notes" maxlength="1000" rows="3"></textarea></label>
+<label>Document file<input id="pdf-file" type="file" accept=".pdf,.jpg,.jpeg,.png" aria-describedby="file-help" required></label>
+<small id="file-help">PDF, JPG or PNG. Up to 5 MiB per file and 25 megapixels per image.</small><button id="upload-button">Upload document</button><p id="upload-message" role="status"></p>
 </form></div></section>
 <section class="card" id="reviewer-panel" hidden><h2>Pending reviews</h2><ul id="review-queue"></ul><p id="review-message" role="status"></p></section>
 <section class="card" id="admin-panel" hidden><h2>Registered users</h2><table><thead><tr><th scope="col">ID</th><th scope="col">Email address</th><th scope="col">Role</th></tr></thead><tbody id="admin-rows"></tbody></table><p id="admin-message" role="status"></p></section>
