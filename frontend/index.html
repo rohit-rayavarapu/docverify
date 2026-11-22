@@ -1,61 +1,68 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in · DocVerify AI</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocVerify AI</title>
+<style>
+:root{--ink:#16363c;--teal:#076961;--line:#cededb;--muted:#456261;--bg:#f2f6f4;font-family:"Inter","Segoe UI",sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}
+header{background:#fff;border-bottom:1px solid var(--line)}
+.bar,main{width:min(100% - 2rem,68rem);margin:auto}.bar{display:flex;align-items:center;justify-content:space-between;min-height:4.5rem;gap:1rem}
+.brand,.identity,.actions{display:flex;align-items:center;flex-wrap:wrap;gap:.6rem}.brand{font-weight:750;font-size:1.25rem;letter-spacing:-.04em}.brand b{color:var(--teal)}
+.mark{display:grid;place-items:center;background:var(--teal);color:white;width:2.1rem;height:2.1rem;border-radius:.6rem}
+main{padding:clamp(1.5rem,5vw,4rem) 0}.identity{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
+h1,h2{line-height:1.15;letter-spacing:-.035em}h1{font-size:clamp(2rem,5vw,3rem);margin:.85rem 0 1.6rem}h2{font-size:1.35rem;margin:0 0 1rem}
+.card{background:white;border:1px solid var(--line);border-radius:1rem;padding:clamp(1rem,3vw,2rem);box-shadow:0 6px 24px #183a3410;min-width:0}
+.auth{max-width:27rem;margin:clamp(.5rem,4vh,3rem) auto}.auth h1{margin-top:0}.auth form,.upload form,label{display:grid;gap:.5rem}form{row-gap:1rem!important}label{font-weight:600}
+input,button{font:inherit;border-radius:.55rem;min-height:2.75rem}input{min-width:0;width:100%;border:1px solid #91a9a5;padding:.65rem .8rem}
+button{background:var(--teal);border:1px solid transparent;color:white;font-weight:650;padding:.55rem 1rem;cursor:pointer}
+button:hover{filter:brightness(.94)}button:disabled{opacity:.6;cursor:wait}
+button.quiet,.actions button:first-child{background:white;border-color:#a8bfba;color:var(--ink)}button.reject{color:#923a36;background:#fff4f2;border-color:#ecc9c4}
+button.link{background:transparent;color:var(--teal);width:100%;margin-top:.8rem;text-decoration:underline}
+:focus-visible{outline:3px solid #167ab3;outline-offset:3px}small,[role=status]{color:var(--muted)}[role=status]{margin:.7rem 0 0}[role=status]:empty{display:none}
+#applicant-documents{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(15rem,1fr);gap:1.2rem;align-items:start}
+ul{list-style:none;padding:0;margin:0}li{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.2rem 0;border-top:1px solid var(--line)}
+.doc{display:grid;gap:.25rem;min-width:0;overflow-wrap:anywhere}.doc strong{font-size:1rem}.owner{color:var(--muted);font-size:.92rem}.actions{flex-shrink:0}
+.role,.badge{display:inline-block;border-radius:2rem;padding:.24rem .72rem;font-size:.83rem;font-weight:700;background:#e3f1ed;color:#185b50}
+.badge.pending{background:#fff0cf;color:#754e08}.badge.rejected{background:#fbe6e3;color:#943c37}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:.75rem .4rem;border-top:1px solid var(--line);overflow-wrap:anywhere}th{color:var(--muted)}
+@media(max-width:48rem){#applicant-documents{grid-template-columns:1fr}#review-queue li{align-items:flex-start;flex-direction:column}.actions{flex-shrink:1}}
+@media(max-width:30rem){main,.bar{width:calc(100% - 1.25rem)}li{flex-wrap:wrap}.actions{gap:.4rem}.actions button{padding:.5rem .7rem}td,th{padding:.6rem .2rem}table{font-size:.9rem}}
+
+</style>
+<script defer src="/app.js"></script>
 </head>
 <body>
-  <header class="brand">DocVerify AI</header>
-
-  <main>
-    <section class="card" id="login-panel">
-      <h1>Sign in</h1>
-      <form id="login-form">
-        <label for="email">Email address</label>
-        <input id="email" name="email" type="email" autocomplete="username" required>
-
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password"
-               autocomplete="current-password" required>
-
-        <button id="submit-button" type="submit">Sign in</button>
-        <p id="login-message" role="status"></p>
-      </form>
-    </section>
-
-    <section class="card" id="account-panel" hidden>
-      <h1 id="account-heading" tabindex="-1">Your account</h1>
-      <dl>
-        <dt>Email address</dt>
-        <dd id="account-email"></dd>
-        <dt>Role</dt>
-        <dd id="account-role"></dd>
-      </dl>
-      <section id="applicant-documents" hidden>
-  <h2>My documents</h2>
-  <ul id="document-list" aria-label="Your documents"></ul>
-  <p id="list-message" role="status"></p>
-
-  <form id="upload-form">
-    <label for="pdf-file">Upload a PDF</label>
-    <input id="pdf-file" type="file" accept=".pdf,application/pdf"
-           aria-describedby="file-hint" required>
-    <small id="file-hint">Maximum file size: 5 MiB.</small>
-    <button id="upload-button" type="submit">Upload document</button>
-    <p id="upload-message" role="status"></p>
-  </form>
+<header><div class="bar"><div class="brand"><span class="mark" aria-hidden="true">✓</span>DocVerify <b>AI</b></div><button hidden id="switch-account" class="quiet">Log out</button></div></header>
+<main>
+<section id="login-panel" class="auth card">
+<h1>Sign in</h1>
+<form id="login-form">
+<label>Email address<input id="email" type="email" autocomplete="username" required></label>
+<label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+<button id="submit-button">Sign in</button><p id="login-message" role="status"></p>
+</form><button class="link" id="show-register">Create an applicant account</button>
 </section>
-<section id="reviewer-panel" hidden>
-  <h2>Pending reviews</h2>
-  <ul id="review-queue" aria-label="Documents awaiting review"></ul>
-  <p id="review-message" role="status"></p>
+<section id="register-panel" class="auth card" hidden>
+<h1>Create an account</h1>
+<form id="register-form">
+<label>Applicant name<input id="register-name" autocomplete="name" maxlength="120" required></label>
+<label>Email address<input id="register-email" type="email" autocomplete="email" required></label>
+<label>Password<input id="register-password" type="password" autocomplete="new-password" minlength="15" maxlength="128" aria-describedby="password-help" required></label>
+<small id="password-help">Use 15–128 characters.</small>
+<button id="register-submit">Create applicant account</button><p id="register-message" role="status"></p>
+</form><button class="link" id="back-to-login">Back to sign in</button>
 </section>
-<button type="button" id="switch-account">Log out</button>
-
-    </section>
-  </main>
-</body>
-</html>
+<section id="account-panel" hidden>
+<div class="identity"><span id="account-role" class="role"></span><span id="account-email"></span></div>
+<h1 id="account-heading" tabindex="-1">Workspace</h1>
+<section id="applicant-documents" hidden>
+<div class="card"><h2>My documents</h2><ul id="document-list"></ul><p id="list-message" role="status"></p></div>
+<div class="card upload"><h2>Upload a document</h2><form id="upload-form">
+<label>PDF file<input id="pdf-file" type="file" accept=".pdf,application/pdf" aria-describedby="file-help" required></label>
+<small id="file-help">Maximum file size: 5 MiB.</small><button id="upload-button">Upload PDF</button><p id="upload-message" role="status"></p>
+</form></div></section>
+<section class="card" id="reviewer-panel" hidden><h2>Pending reviews</h2><ul id="review-queue"></ul><p id="review-message" role="status"></p></section>
+<section class="card" id="admin-panel" hidden><h2>Registered users</h2><table><thead><tr><th scope="col">ID</th><th scope="col">Email address</th><th scope="col">Role</th></tr></thead><tbody id="admin-rows"></tbody></table><p id="admin-message" role="status"></p></section>
+</section></main>
+</body></html>

@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name varchar(120);
+COMMIT;

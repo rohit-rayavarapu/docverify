@@ -16,6 +16,11 @@ function showSignIn(message = "") {
   accessToken = "";
   listRequest += 1;
   loginForm.reset();
+  byId("admin-rows").replaceChildren();
+  byId("admin-message").textContent = "";
+  byId("admin-panel").hidden = true;
+  byId("register-panel").hidden = true;
+  byId("switch-account").hidden = true;
   uploadForm.reset();
   documentList.replaceChildren();
   reviewQueue.replaceChildren();
@@ -88,12 +93,16 @@ loginForm.addEventListener("submit", async (event) => {
     byId("account-role").textContent = profile.role;
     byId("login-panel").hidden = true;
     byId("account-panel").hidden = false;
+    byId("switch-account").hidden = false;
+    byId("admin-panel").hidden = profile.role !== "Admin";
+    byId("account-heading").textContent = profile.role + " workspace";
     byId("applicant-documents").hidden = profile.role !== "Applicant";
     byId("reviewer-panel").hidden = profile.role !== "Reviewer";
     byId("account-heading").focus();
 
     if (profile.role === "Applicant") await loadDocuments();
     if (profile.role === "Reviewer") await loadReviewQueue();
+    if (profile.role === "Admin") await loadAdminUsers();
   } catch {
     loginMessage.textContent = "Could not reach DocVerify. Check that Docker is running.";
   } finally {
@@ -116,10 +125,10 @@ async function loadDocuments() {
     documentList.replaceChildren();
     for (const doc of documents) {
       const item = document.createElement("li");
-      const name = document.createElement("span");
+      const name = documentLabel(doc);
       const status = document.createElement("strong");
-      name.textContent = doc.original_filename;
       status.textContent = doc.review_status;
+      status.className = "badge " + doc.review_status.toLowerCase();
       item.append(name, " ", status);
       documentList.append(item);
     }
@@ -183,27 +192,25 @@ async function loadReviewQueue() {
     reviewQueue.replaceChildren();
     for (const doc of documents) {
       const item = document.createElement("li");
-      const name = document.createElement("span");
-      name.textContent = doc.original_filename;
+      const name = documentLabel(doc);
 
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = "Open PDF";
       button.setAttribute("aria-label", "Open " + doc.original_filename);
       button.addEventListener("click", () => openReviewerPdf(doc.id));
-const actions = document.createElement("div");
-actions.className = "review-actions";
-actions.append(button); // Existing Open PDF button
 
-for (const decision of ["Approved", "Rejected"]) {
-  const action = document.createElement("button");
-  action.type = "button";
-  action.textContent = decision === "Approved" ? "Approve" : "Reject";
-  action.addEventListener("click", () => submitDecision(doc, decision, actions));
-  actions.append(action);
-}
-
-item.append(name, actions);
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      actions.append(button);
+      for (const decision of ["Approved", "Rejected"]) {
+        const action = document.createElement("button");
+        action.textContent = decision === "Approved" ? "Approve" : "Reject";
+        action.className = decision === "Rejected" ? "reject" : "approve";
+        action.addEventListener("click", () => decide(doc, decision, item));
+        actions.append(action);
+      }
+      item.append(name, actions);
       reviewQueue.append(item);
     }
     reviewMessage.textContent = documents.length ? "" : "No documents are awaiting review.";
@@ -260,49 +267,112 @@ async function openReviewerPdf(documentId) {
   }
 }
 
-async function submitDecision(doc, decision, actions) {
-  const verb = decision === "Approved" ? "Approve" : "Reject";
-  if (!window.confirm(`${verb} "${doc.original_filename}"? This decision is final.`)) {
-    return;
-  }
+function documentLabel(doc) {
+  const label = document.createElement("div");
+  label.className = "doc";
+  const filename = document.createElement("strong");
+  filename.textContent = doc.original_filename;
+  const owner = document.createElement("span");
+  owner.className = "owner";
+  owner.textContent = "Applicant: " + (doc.applicant_name || doc.applicant_email || "Name unavailable");
+  label.append(filename, owner);
+  return label;
+}
 
+async function decide(doc, decision, item) {
+  if (!window.confirm('Set "' + doc.original_filename + '" to ' + decision + '? This decision is final.')) return;
   const token = accessToken;
-  const buttons = actions.querySelectorAll("button");
-  buttons.forEach((button) => { button.disabled = true; });
-  reviewMessage.textContent = "Saving decision…";
-
+  const buttons = item.querySelectorAll("button");
+  buttons.forEach(button => { button.disabled = true; });
   try {
-    const response = await sessionFetch(
-      `/api/reviewer/documents/${doc.id}/decision`,
-      token,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
-      }
-    );
-
+    const response = await sessionFetch("/api/reviewer/documents/" + doc.id + "/decision", token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
     if (!response || token !== accessToken) return;
-
-    if (response.ok || response.status === 409) {
-      // Remove only this row so other pending documents stay available.
-      actions.closest("li").remove();
-      const result = response.ok
-        ? `${doc.original_filename}: ${decision}.`
-        : `${doc.original_filename} was already reviewed.`;
-      reviewMessage.textContent = reviewQueue.children.length
-        ? result
-        : `${result} No documents are awaiting review.`;
-      return;
-    }
-
-    reviewMessage.textContent = `Could not save the decision (${response.status}).`;
+    if (!response.ok && response.status !== 409) throw new Error();
+    item.remove();
+    reviewMessage.textContent = response.ok
+      ? doc.original_filename + ": " + decision + "."
+      : "This submission was already reviewed.";
+    if (!reviewQueue.children.length) reviewMessage.textContent += " No pending reviews.";
   } catch {
-    if (token === accessToken) {
-      reviewMessage.textContent =
-        "Connection interrupted. Reload the queue to check whether the decision was saved.";
-    }
+    if (token === accessToken) reviewMessage.textContent = "Could not confirm the decision. Check the queue before retrying.";
   } finally {
-    buttons.forEach((button) => { button.disabled = false; });
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
+
+async function loadAdminUsers() {
+  const token = accessToken;
+  const message = byId("admin-message");
+  message.textContent = "Loading users…";
+  try {
+    const response = await sessionFetch("/api/admin/users", token);
+    if (!response) return;
+    if (!response.ok) throw new Error();
+    const users = await response.json();
+    if (token !== accessToken) return;
+    const rows = byId("admin-rows");
+    rows.replaceChildren();
+    for (const user of users) {
+      const row = rows.insertRow();
+      for (const value of [user.id, user.email, user.role]) row.insertCell().textContent = value;
+    }
+    message.textContent = users.length ? "" : "No registered users.";
+  } catch {
+    if (token === accessToken) message.textContent = "Could not load the registered users.";
+  }
+}
+
+const registerForm = byId("register-form");
+byId("show-register").addEventListener("click", () => {
+  registerForm.reset();
+  byId("register-message").textContent = "";
+  byId("register-email").value = byId("email").value.trim();
+  byId("password").value = "";
+  byId("login-panel").hidden = true;
+  byId("register-panel").hidden = false;
+  byId("register-name").focus();
+});
+byId("back-to-login").addEventListener("click", () => {
+  registerForm.reset();
+  showSignIn();
+});
+registerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const email = byId("register-email").value.trim();
+  const name = byId("register-name").value.trim();
+  const message = byId("register-message");
+  if (!name) {
+    message.textContent = "Enter your name.";
+    byId("register-name").focus();
+    return;
+  }
+  byId("register-submit").disabled = true;
+  byId("back-to-login").disabled = true;
+  message.textContent = "Creating account…";
+  try {
+    const response = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, full_name: name, password: byId("register-password").value }),
+    });
+    if (!response.ok) {
+      message.textContent = response.status === 409
+        ? "This email is already registered. Sign in to continue."
+        : "Could not register. Check your name, email and password.";
+      return;
+    }
+    registerForm.reset();
+    showSignIn("Account created. Sign in to continue.");
+    byId("email").value = email;
+    byId("password").focus();
+  } catch {
+    message.textContent = "Could not reach DocVerify.";
+  } finally {
+    byId("register-submit").disabled = false;
+    byId("back-to-login").disabled = false;
+  }
+});
