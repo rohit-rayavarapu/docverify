@@ -8,7 +8,7 @@ const documentList = byId("document-list");
 const reviewQueue = byId("review-queue");
 const reviewMessage = byId("review-message");
 
-const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 let accessToken = "";
 let listRequest = 0;
 
@@ -16,6 +16,7 @@ function showSignIn(message = "") {
   accessToken = "";
   listRequest += 1;
   loginForm.reset();
+  byId("known-applications").replaceChildren();
   byId("admin-rows").replaceChildren();
   byId("admin-message").textContent = "";
   byId("admin-panel").hidden = true;
@@ -122,6 +123,12 @@ async function loadDocuments() {
 
     const documents = await response.json();
     if (request !== listRequest) return;
+    const options = Array.from(new Set(documents.map(doc => doc.application_title))).map(title => {
+      const option = document.createElement("option");
+      option.value = title;
+      return option;
+    });
+    byId("known-applications").replaceChildren(...options);
     documentList.replaceChildren();
     for (const doc of documents) {
       const item = document.createElement("li");
@@ -141,17 +148,21 @@ async function loadDocuments() {
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const file = byId("pdf-file").files[0];
-  if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
-    uploadMessage.textContent = "Choose a PDF file.";
+  if (!file || !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
+    uploadMessage.textContent = "Choose a PDF, JPG or PNG file.";
     return;
   }
-  if (file.size > MAX_PDF_BYTES) {
-    uploadMessage.textContent = "Choose a PDF of 5 MiB or less.";
+  if (file.size > MAX_FILE_BYTES) {
+    uploadMessage.textContent = "Choose a file of 5 MiB or less.";
     return;
   }
 
   const token = accessToken;
   const body = new FormData();
+  const title = byId("application-title").value.trim();
+  body.append("application", title);
+  body.append("document_type", byId("document-type").value);
+  body.append("notes", byId("document-notes").value);
   body.append("file", file);
   byId("upload-button").disabled = true;
   uploadMessage.textContent = "Uploading…";
@@ -168,6 +179,7 @@ uploadForm.addEventListener("submit", async (event) => {
       return;
     }
     uploadForm.reset();
+    byId("application-title").value = title;
     uploadMessage.textContent = file.name + " uploaded.";
     await loadDocuments();
   } catch {
@@ -196,7 +208,7 @@ async function loadReviewQueue() {
 
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = "Open PDF";
+      button.textContent = "Open file";
       button.setAttribute("aria-label", "Open " + doc.original_filename);
       button.addEventListener("click", () => openReviewerPdf(doc.id));
 
@@ -223,32 +235,32 @@ async function openReviewerPdf(documentId) {
   const token = accessToken;
   const tab = window.open("about:blank", "_blank");
   if (!tab) {
-    reviewMessage.textContent = "Allow pop-ups for DocVerify, then click Open PDF again.";
+    reviewMessage.textContent = "Allow pop-ups for DocVerify, then click Open file again.";
     return;
   }
 
   tab.opener = null;
-  tab.document.title = "Opening PDF";
-  tab.document.body.textContent = "Loading PDF…";
+  tab.document.title = "Opening file";
+  tab.document.body.textContent = "Loading file…";
   reviewMessage.textContent = "";
   let pdfUrl;
 
   try {
     const response = await sessionFetch("/api/reviewer/documents/" + documentId + "/file", token, {
-      headers: { Accept: "application/pdf" },
+      headers: { Accept: "application/pdf, image/jpeg, image/png" },
     });
     if (!response || tab.closed) {
       tab.close();
       return;
     }
-    if (!response.ok) throw new Error("Could not open the PDF (" + response.status + ").");
+    if (!response.ok) throw new Error("Could not open the file (" + response.status + ").");
 
     const pdf = await response.blob();
     if (token !== accessToken || tab.closed) {
       tab.close();
       return;
     }
-    if (pdf.type.split(";")[0] !== "application/pdf") {
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(pdf.type.split(";")[0])) {
       throw new Error("The server returned an unexpected file type.");
     }
 
@@ -263,7 +275,7 @@ async function openReviewerPdf(documentId) {
   } catch (error) {
     tab.close();
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    if (token === accessToken) reviewMessage.textContent = error.message || "Could not open the PDF.";
+    if (token === accessToken) reviewMessage.textContent = error.message || "Could not open the file.";
   }
 }
 
@@ -275,7 +287,15 @@ function documentLabel(doc) {
   const owner = document.createElement("span");
   owner.className = "owner";
   owner.textContent = "Applicant: " + (doc.applicant_name || doc.applicant_email || "Name unavailable");
-  label.append(filename, owner);
+  const metadata = document.createElement("span");
+  metadata.className = "owner";
+  metadata.textContent = [doc.application_title, doc.document_type].join(" · ");
+  label.append(filename, owner, metadata);
+  if (doc.notes) {
+    const notes = document.createElement("span");
+    notes.textContent = doc.notes;
+    label.append(notes);
+  }
   return label;
 }
 

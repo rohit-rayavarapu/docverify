@@ -34,9 +34,10 @@ def list_pending_documents():
             rows = connection.execute(
                 """
                 SELECT d.id, d.original_filename, d.submitted_at, d.review_status,
-                       u.full_name, u.email
+                       u.full_name, u.email, a.title, d.document_type, d.notes
                 FROM documents AS d
                 JOIN users AS u ON u.id = d.applicant_id
+                JOIN applications AS a ON a.id = d.application_id
                 WHERE d.review_status = 'Pending'
                 ORDER BY d.submitted_at, d.id
                 """
@@ -52,6 +53,9 @@ def list_pending_documents():
             review_status=row[3],
             applicant_name=row[4],
             applicant_email=row[5],
+            application_title=row[6],
+            document_type=row[7],
+            notes=row[8],
         )
         for row in rows
     ]
@@ -59,14 +63,14 @@ def list_pending_documents():
 @router.get(
     "/documents/{document_id}/file",
     response_class=Response,
-    responses={200: {"content": {"application/pdf": {}}}},
+    responses={200: {"content": {"application/pdf": {}, "image/jpeg": {}, "image/png": {}}}},
     dependencies=[Depends(require_reviewer)],
 )
-def open_document_pdf(document_id: int):
+def open_document_file(document_id: int):
     try:
         with psycopg.connect(connect_timeout=3) as connection:
             row = connection.execute(
-                "SELECT pdf_content FROM documents WHERE id = %s",
+                "SELECT pdf_content, media_type FROM documents WHERE id = %s",
                 (document_id,),
             ).fetchone()
     except psycopg.OperationalError:
@@ -75,11 +79,12 @@ def open_document_pdf(document_id: int):
     if row is None:
         raise HTTPException(404, "Document not found")
 
+    extension = {"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg"}[row[1]]
     return Response(
         content=bytes(row[0]),
-        media_type="application/pdf",
+        media_type=row[1],
         headers={
-            "Content-Disposition": f'inline; filename="document-{document_id}.pdf"',
+            "Content-Disposition": f'inline; filename="document-{document_id}.{extension}"',
             "Cache-Control": "no-store",
         },
     )
