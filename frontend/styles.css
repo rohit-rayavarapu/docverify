@@ -1,0 +1,107 @@
+:root {
+  --page: #f1f5f5;
+  --surface: #ffffff;
+  --text: #183337;
+  --muted: #425d61;
+  --border: #91a6a8;
+  --accent: #096966;
+  --accent-hover: #064e4c;
+  --focus: #126bb1;
+  font-family: "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--page);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.brand {
+  padding: 1.2rem clamp(1rem, 5vw, 5rem);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+main {
+  width: min(100% - 2rem, 28rem);
+  margin: clamp(2rem, 10vh, 6rem) auto;
+}
+
+.card {
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+h1 { margin: 0 0 1.5rem; }
+form { display: grid; gap: 0.65rem; }
+label, dt { font-weight: 600; }
+
+input, button {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.45rem;
+  font: inherit;
+}
+
+input {
+  border: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+
+button {
+  border: 0;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#review-queue {
+  list-style: none;
+  padding: 0;
+}
+
+#review-queue li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#review-queue span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#review-queue button {
+  flex: none;
+  width: auto;
+}
+
+#review-queue li {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.review-actions button {
+  font-size: 0.875rem;
+}
+
+button:hover { background: var(--accent-hover); }
+button:disabled { opacity: 0.7; cursor: wait; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+dd { margin: 0.25rem 0 1.25rem; overflow-wrap: anywhere; }
+#login-message { margin: 0; color: var(--muted); }
+#login-message:empty { display: none; }
