@@ -26,9 +26,8 @@ def reviewer_dashboard(reviewer: RegisteredUser = Depends(require_reviewer)):
 @router.get(
     "/documents",
     response_model=list[DocumentListItem],
-    dependencies=[Depends(require_reviewer)],
 )
-def list_pending_documents():
+def list_pending_documents(reviewer: RegisteredUser = Depends(require_reviewer)):
     try:
         with psycopg.connect(connect_timeout=3) as connection:
             rows = connection.execute(
@@ -38,9 +37,10 @@ def list_pending_documents():
                 FROM documents AS d
                 JOIN users AS u ON u.id = d.applicant_id
                 JOIN applications AS a ON a.id = d.application_id
-                WHERE d.review_status = 'Pending'
+                WHERE d.review_status = 'Pending' AND d.applicant_id <> %s
                 ORDER BY d.submitted_at, d.id
-                """
+                """,
+                (reviewer.id,),
             ).fetchall()
     except psycopg.OperationalError:
         raise HTTPException(503, "Database unavailable") from None
@@ -64,14 +64,13 @@ def list_pending_documents():
     "/documents/{document_id}/file",
     response_class=Response,
     responses={200: {"content": {"application/pdf": {}, "image/jpeg": {}, "image/png": {}}}},
-    dependencies=[Depends(require_reviewer)],
 )
-def open_document_file(document_id: int):
+def open_document_file(document_id: int, reviewer: RegisteredUser = Depends(require_reviewer)):
     try:
         with psycopg.connect(connect_timeout=3) as connection:
             row = connection.execute(
-                "SELECT pdf_content, media_type FROM documents WHERE id = %s",
-                (document_id,),
+                "SELECT pdf_content, media_type FROM documents WHERE id = %s AND applicant_id <> %s",
+                (document_id, reviewer.id),
             ).fetchone()
     except psycopg.OperationalError:
         raise HTTPException(503, "Database unavailable") from None
@@ -106,16 +105,16 @@ def record_decision(
                 """
                 UPDATE documents
                 SET review_status = %s, reviewed_by = %s, reviewed_at = now()
-                WHERE id = %s AND review_status = 'Pending'
+                WHERE id = %s AND applicant_id <> %s AND review_status = 'Pending'
                 RETURNING id, original_filename, submitted_at, review_status
                 """,
-                (request.decision, reviewer.id, document_id),
+                (request.decision, reviewer.id, document_id, reviewer.id),
             ).fetchone()
 
             if row is None:
                 exists = connection.execute(
-                    "SELECT 1 FROM documents WHERE id = %s",
-                    (document_id,),
+                    "SELECT 1 FROM documents WHERE id = %s AND applicant_id <> %s",
+                    (document_id, reviewer.id),
                 ).fetchone()
                 if exists is None:
                     raise HTTPException(404, "Document not found")
