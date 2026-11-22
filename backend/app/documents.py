@@ -20,6 +20,11 @@ class DocumentSummary(BaseModel):
     review_status: str
 
 
+class DocumentListItem(DocumentSummary):
+    applicant_name: str | None
+    applicant_email: str
+
+
 def require_applicant(user: RegisteredUser = Depends(current_user)) -> RegisteredUser:
     if user.role != "Applicant":
         raise HTTPException(status_code=403, detail="Applicant access required")
@@ -62,16 +67,18 @@ def upload_document(
     )
 
 
-@router.get("", response_model=list[DocumentSummary])
+@router.get("", response_model=list[DocumentListItem])
 def list_my_documents(applicant: RegisteredUser = Depends(require_applicant)):
     try:
         with psycopg.connect(connect_timeout=3) as connection:
             rows = connection.execute(
                 """
-                SELECT id, original_filename, submitted_at, review_status
-                FROM documents
-                WHERE applicant_id = %s
-                ORDER BY submitted_at DESC, id DESC
+                SELECT d.id, d.original_filename, d.submitted_at, d.review_status,
+                       u.full_name, u.email
+                FROM documents AS d
+                JOIN users AS u ON u.id = d.applicant_id
+                WHERE d.applicant_id = %s
+                ORDER BY d.submitted_at DESC, d.id DESC
                 """,
                 (applicant.id,),
             ).fetchall()
@@ -79,11 +86,13 @@ def list_my_documents(applicant: RegisteredUser = Depends(require_applicant)):
         raise HTTPException(503, "Database unavailable") from None
 
     return [
-        DocumentSummary(
+        DocumentListItem(
             id=row[0],
             original_filename=row[1],
             submitted_at=row[2],
             review_status=row[3],
+            applicant_name=row[4],
+            applicant_email=row[5],
         )
         for row in rows
     ]

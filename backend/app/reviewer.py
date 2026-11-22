@@ -1,6 +1,6 @@
 import psycopg
 from fastapi.responses import Response
-from .documents import DocumentSummary
+from .documents import DocumentListItem, DocumentSummary
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Literal
 
@@ -25,7 +25,7 @@ def reviewer_dashboard(reviewer: RegisteredUser = Depends(require_reviewer)):
 
 @router.get(
     "/documents",
-    response_model=list[DocumentSummary],
+    response_model=list[DocumentListItem],
     dependencies=[Depends(require_reviewer)],
 )
 def list_pending_documents():
@@ -33,21 +33,25 @@ def list_pending_documents():
         with psycopg.connect(connect_timeout=3) as connection:
             rows = connection.execute(
                 """
-                SELECT id, original_filename, submitted_at, review_status
-                FROM documents
-                WHERE review_status = 'Pending'
-                ORDER BY submitted_at, id
+                SELECT d.id, d.original_filename, d.submitted_at, d.review_status,
+                       u.full_name, u.email
+                FROM documents AS d
+                JOIN users AS u ON u.id = d.applicant_id
+                WHERE d.review_status = 'Pending'
+                ORDER BY d.submitted_at, d.id
                 """
             ).fetchall()
     except psycopg.OperationalError:
         raise HTTPException(503, "Database unavailable") from None
 
     return [
-        DocumentSummary(
+        DocumentListItem(
             id=row[0],
             original_filename=row[1],
             submitted_at=row[2],
             review_status=row[3],
+            applicant_name=row[4],
+            applicant_email=row[5],
         )
         for row in rows
     ]
