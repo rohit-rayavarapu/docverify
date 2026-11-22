@@ -372,6 +372,50 @@ async function decide(doc, decision, item) {
   }
 }
 
+function roleEditor(user, token, message) {
+  const controls = document.createElement("div");
+  controls.className = "role-editor";
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Role for " + user.email);
+  for (const role of ["Applicant", "Reviewer", "Admin"]) select.add(new Option(role, role));
+  select.value = user.role;
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = "Save";
+  save.disabled = true;
+  select.addEventListener("change", () => { save.disabled = select.value === user.role; });
+  save.addEventListener("click", async () => {
+    const role = select.value;
+    if (!window.confirm("Change " + user.email + " from " + user.role + " to " + role + "?")) return;
+    select.disabled = true;
+    save.disabled = true;
+    try {
+      const response = await sessionFetch("/api/admin/users/" + user.id + "/role", token, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!response) return;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(typeof error.detail === "string" ? error.detail : "Could not save role.");
+      }
+      const updated = await response.json();
+      if (token !== accessToken) return;
+      user.role = updated.role;
+      select.value = updated.role;
+      message.textContent = user.email + " now has the " + updated.role + " role.";
+    } catch (error) {
+      if (token === accessToken) message.textContent = error.message || "Could not save role.";
+    } finally {
+      select.disabled = false;
+      save.disabled = select.value === user.role;
+    }
+  });
+  controls.append(select, save);
+  return controls;
+}
+
 async function loadAdminUsers() {
   const token = accessToken;
   const message = byId("admin-message");
@@ -386,7 +430,14 @@ async function loadAdminUsers() {
     rows.replaceChildren();
     for (const user of users) {
       const row = rows.insertRow();
-      for (const value of [user.id, user.email, user.role]) row.insertCell().textContent = value;
+      row.insertCell().textContent = user.id;
+      row.insertCell().textContent = user.email;
+      const cell = row.insertCell();
+      if (user.email === byId("account-email").textContent) {
+        cell.textContent = user.role;
+      } else {
+        cell.append(roleEditor(user, token, message));
+      }
     }
     message.textContent = users.length ? "" : "No registered users.";
   } catch {
