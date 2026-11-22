@@ -5,6 +5,7 @@ from .admin import router as admin_router
 from .login import router as login_router
 from .registration import router as registration_router
 from .reviewer import router as reviewer_router
+from .documents import router as documents_router
 
 
 app = FastAPI(title="DocVerify AI")
@@ -13,6 +14,7 @@ app.include_router(registration_router)
 app.include_router(login_router)
 app.include_router(reviewer_router)
 app.include_router(admin_router)
+app.include_router(documents_router)
 
 
 @app.get("/api/health")
