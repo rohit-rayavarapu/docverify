@@ -18,7 +18,7 @@ services:
     ports:
       - "127.0.0.1:8080:80"
     depends_on:
-      - backend 
+      - backend
 
   db:
     image: postgres:16
@@ -28,11 +28,28 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "docverify", "-d", "docverify"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "docverify", "-d", "docverify"]
       interval: 5s
       timeout: 5s
       retries: 10
 
+  vector-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: vectors
+      POSTGRES_USER: docverify
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - vector_data:/var/lib/postgresql/data
+      - ./backend/db/vector:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "docverify", "-d", "vectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
 volumes:
   postgres_data:
+  vector_data:
