@@ -2,6 +2,9 @@ import psycopg
 from fastapi.responses import Response
 from .documents import DocumentSummary
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from pydantic import BaseModel
 
 from .login import current_user
 from .registration import RegisteredUser
@@ -75,4 +78,45 @@ def open_document_pdf(document_id: int):
             "Content-Disposition": f'inline; filename="document-{document_id}.pdf"',
             "Cache-Control": "no-store",
         },
+    )
+
+
+class ReviewDecision(BaseModel):
+    decision: Literal["Approved", "Rejected"]
+
+
+@router.post("/documents/{document_id}/decision", response_model=DocumentSummary)
+def record_decision(
+    document_id: int,
+    request: ReviewDecision,
+    reviewer: RegisteredUser = Depends(require_reviewer),
+):
+    try:
+        with psycopg.connect(connect_timeout=3) as connection:
+            row = connection.execute(
+                """
+                UPDATE documents
+                SET review_status = %s, reviewed_by = %s, reviewed_at = now()
+                WHERE id = %s AND review_status = 'Pending'
+                RETURNING id, original_filename, submitted_at, review_status
+                """,
+                (request.decision, reviewer.id, document_id),
+            ).fetchone()
+
+            if row is None:
+                exists = connection.execute(
+                    "SELECT 1 FROM documents WHERE id = %s",
+                    (document_id,),
+                ).fetchone()
+                if exists is None:
+                    raise HTTPException(404, "Document not found")
+                raise HTTPException(409, "Document already reviewed")
+    except psycopg.OperationalError:
+        raise HTTPException(503, "Database unavailable") from None
+
+    return DocumentSummary(
+        id=row[0],
+        original_filename=row[1],
+        submitted_at=row[2],
+        review_status=row[3],
     )
