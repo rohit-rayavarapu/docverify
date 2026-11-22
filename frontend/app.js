@@ -23,6 +23,7 @@ function showSignIn(message = "") {
   byId("register-panel").hidden = true;
   byId("switch-account").hidden = true;
   uploadForm.reset();
+  byId("pdf-file").disabled = false;
   documentList.replaceChildren();
   reviewQueue.replaceChildren();
   byId("account-email").textContent = "";
@@ -145,15 +146,56 @@ async function loadDocuments() {
   }
 }
 
+const filePicker = byId("pdf-file");
+const selection = byId("selected-files");
+
+function renderSelection() {
+  selection.replaceChildren();
+  const files = Array.from(filePicker.files);
+  if (!files.length) selection.textContent = "No files selected";
+  files.forEach((file, index) => {
+    const row = document.createElement("div");
+    row.className = "selected-row";
+    const name = document.createElement("span");
+    name.textContent = file.name;
+    if (file.size > MAX_FILE_BYTES) name.textContent += " — exceeds 5 MiB";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", "Remove " + file.name);
+    remove.addEventListener("click", () => {
+      const remaining = new DataTransfer();
+      Array.from(filePicker.files).forEach((entry, position) => {
+        if (position !== index) remaining.items.add(entry);
+      });
+      filePicker.files = remaining.files;
+      uploadMessage.textContent = "";
+      renderSelection();
+      const buttons = selection.querySelectorAll("button");
+      (buttons[Math.min(index, buttons.length - 1)] || filePicker).focus();
+    });
+    row.append(name, remove);
+    selection.append(row);
+  });
+}
+filePicker.addEventListener("change", () => {
+  uploadMessage.textContent = "";
+  renderSelection();
+});
+uploadForm.addEventListener("reset", () => {
+  byId("selected-files").textContent = "No files selected";
+});
+
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = byId("pdf-file").files[0];
-  if (!file || !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
-    uploadMessage.textContent = "Choose a PDF, JPG or PNG file.";
+  const files = Array.from(byId("pdf-file").files);
+  if (!files.length || files.length > 10) {
+    uploadMessage.textContent = "Choose between 1 and 10 files.";
     return;
   }
-  if (file.size > MAX_FILE_BYTES) {
-    uploadMessage.textContent = "Choose a file of 5 MiB or less.";
+  const invalid = files.find(file => !/\.(pdf|jpe?g|png)$/i.test(file.name) || file.size > MAX_FILE_BYTES);
+  if (invalid) {
+    uploadMessage.textContent = invalid.name + ": choose a PDF, JPG or PNG of 5 MiB or less.";
     return;
   }
 
@@ -163,12 +205,14 @@ uploadForm.addEventListener("submit", async (event) => {
   body.append("application", title);
   body.append("document_type", byId("document-type").value);
   body.append("notes", byId("document-notes").value);
-  body.append("file", file);
+  for (const file of files) body.append("files", file);
+  filePicker.disabled = true;
+  selection.querySelectorAll("button").forEach(button => { button.disabled = true; });
   byId("upload-button").disabled = true;
   uploadMessage.textContent = "Uploading…";
 
   try {
-    const response = await sessionFetch("/api/documents", token, { method: "POST", body });
+    const response = await sessionFetch("/api/documents/batch", token, { method: "POST", body });
     if (!response) return;
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -180,14 +224,18 @@ uploadForm.addEventListener("submit", async (event) => {
     }
     uploadForm.reset();
     byId("application-title").value = title;
-    uploadMessage.textContent = file.name + " uploaded.";
+    uploadMessage.textContent = files.length === 1 ? files[0].name + " uploaded." : files.length + " documents uploaded.";
     await loadDocuments();
   } catch {
     if (token === accessToken) {
       uploadMessage.textContent = "Connection interrupted. Check your list before uploading again.";
     }
   } finally {
-    if (token === accessToken) byId("upload-button").disabled = false;
+    if (token === accessToken) {
+      filePicker.disabled = false;
+      byId("upload-button").disabled = false;
+      renderSelection();
+    }
   }
 });
 
@@ -324,6 +372,50 @@ async function decide(doc, decision, item) {
   }
 }
 
+function roleEditor(user, token, message) {
+  const controls = document.createElement("div");
+  controls.className = "role-editor";
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Role for " + user.email);
+  for (const role of ["Applicant", "Reviewer", "Admin"]) select.add(new Option(role, role));
+  select.value = user.role;
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = "Save";
+  save.disabled = true;
+  select.addEventListener("change", () => { save.disabled = select.value === user.role; });
+  save.addEventListener("click", async () => {
+    const role = select.value;
+    if (!window.confirm("Change " + user.email + " from " + user.role + " to " + role + "?")) return;
+    select.disabled = true;
+    save.disabled = true;
+    try {
+      const response = await sessionFetch("/api/admin/users/" + user.id + "/role", token, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!response) return;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(typeof error.detail === "string" ? error.detail : "Could not save role.");
+      }
+      const updated = await response.json();
+      if (token !== accessToken) return;
+      user.role = updated.role;
+      select.value = updated.role;
+      message.textContent = user.email + " now has the " + updated.role + " role.";
+    } catch (error) {
+      if (token === accessToken) message.textContent = error.message || "Could not save role.";
+    } finally {
+      select.disabled = false;
+      save.disabled = select.value === user.role;
+    }
+  });
+  controls.append(select, save);
+  return controls;
+}
+
 async function loadAdminUsers() {
   const token = accessToken;
   const message = byId("admin-message");
@@ -338,7 +430,14 @@ async function loadAdminUsers() {
     rows.replaceChildren();
     for (const user of users) {
       const row = rows.insertRow();
-      for (const value of [user.id, user.email, user.role]) row.insertCell().textContent = value;
+      row.insertCell().textContent = user.id;
+      row.insertCell().textContent = user.email;
+      const cell = row.insertCell();
+      if (user.email === byId("account-email").textContent) {
+        cell.textContent = user.role;
+      } else {
+        cell.append(roleEditor(user, token, message));
+      }
     }
     message.textContent = users.length ? "" : "No registered users.";
   } catch {
