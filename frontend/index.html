@@ -30,8 +30,15 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:.75rem .
 @media(max-width:30rem){main,.bar{width:calc(100% - 1.25rem)}li{flex-wrap:wrap}.actions{gap:.4rem}.actions button{padding:.5rem .7rem}td,th{padding:.6rem .2rem}table{font-size:.9rem}}
 
 select,textarea{font:inherit;color:inherit;width:100%;min-width:0;padding:.65rem .8rem;border:1px solid #91a9a5;border-radius:.55rem;background:white}textarea{resize:vertical}
+.picker-control{position:relative;display:inline-flex;align-items:center;padding:.45rem .9rem;margin:.35rem 0;border:1px solid #91a9a5;border-radius:.55rem;background:white;min-height:2.75rem}
+.picker-control:focus-within{outline:2px solid var(--teal);outline-offset:2px}
+.picker-control input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+#selected-files{white-space:pre-line;overflow-wrap:anywhere;font-size:.9rem}
+.selected-row{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:.35rem 0}
+.selected-row span{min-width:0;overflow-wrap:anywhere}
+.selected-row button{flex:none;background:white;color:var(--teal);border:1px solid var(--line);min-height:2.25rem;padding:.25rem .65rem}
 </style>
-<script defer src="/app.js"></script>
+<script defer src="/app.js?v=remove-files1"></script>
 </head>
 <body>
 <header><div class="bar"><div class="brand"><span class="mark" aria-hidden="true">✓</span>DocVerify <b>AI</b></div><button hidden id="switch-account" class="quiet">Log out</button></div></header>
@@ -59,14 +66,20 @@ select,textarea{font:inherit;color:inherit;width:100%;min-width:0;padding:.65rem
 <h1 id="account-heading" tabindex="-1">Workspace</h1>
 <section id="applicant-documents" hidden>
 <div class="card"><h2>My documents</h2><ul id="document-list"></ul><p id="list-message" role="status"></p></div>
-<div class="card upload"><h2>Upload a document</h2><form id="upload-form">
-<label>Application name<input id="application-title" list="known-applications" maxlength="120" required aria-describedby="application-help"></label>
+<div class="card upload"><h2>Add documents to an application</h2><form id="upload-form">
+<label>Which application is this for?<input placeholder="e.g. MSc Computer Science, Fall 2027" id="application-title" list="known-applications" maxlength="120" required aria-describedby="application-help"></label>
 <datalist id="known-applications"></datalist>
-<small id="application-help">Use the same application name to group documents. Upload one document at a time.</small>
-<label>Document type<select id="document-type" required><option value="">Choose a type</option><option>Transcript</option><option>Degree certificate</option><option>Language certificate</option><option>Other</option></select></label>
-<label>Notes (optional)<textarea id="document-notes" maxlength="1000" rows="3"></textarea></label>
-<label>Document file<input id="pdf-file" type="file" accept=".pdf,.jpg,.jpeg,.png" aria-describedby="file-help" required></label>
-<small id="file-help">PDF, JPG or PNG. Up to 5 MiB per file and 25 megapixels per image.</small><button id="upload-button">Upload document</button><p id="upload-message" role="status"></p>
+<small id="application-help">Choose an existing application or enter a new title. Files with the same title appear together.</small>
+<label>What are you submitting?<select id="document-type" required><option value="">Select a document category</option><option value="Transcript">Academic transcript (grades)</option><option>Degree certificate</option><option value="Language certificate">Language proficiency certificate</option><option value="Other">Other supporting document</option></select></label>
+<label>Message to the reviewer (optional)<textarea placeholder="e.g. The second file is the English translation." id="document-notes" maxlength="1000" rows="3"></textarea></label>
+<div class="file-picker">
+<label for="pdf-file">Document files</label>
+<div class="picker-control"><span aria-hidden="true">Choose files</span>
+<input id="pdf-file" type="file" multiple accept=".pdf,.jpg,.jpeg,.png" aria-describedby="file-help selected-files" required>
+</div>
+<div id="selected-files" aria-live="polite">No files selected</div>
+</div>
+<small id="file-help">Select up to 10 PDF, JPG or PNG files of the same category. Your message applies to all selected files. Maximum 5 MiB per file and 25 megapixels per image.</small><button id="upload-button">Upload files</button><p id="upload-message" role="status"></p>
 </form></div></section>
 <section class="card" id="reviewer-panel" hidden><h2>Pending reviews</h2><ul id="review-queue"></ul><p id="review-message" role="status"></p></section>
 <section class="card" id="admin-panel" hidden><h2>Registered users</h2><table><thead><tr><th scope="col">ID</th><th scope="col">Email address</th><th scope="col">Role</th></tr></thead><tbody id="admin-rows"></tbody></table><p id="admin-message" role="status"></p></section>

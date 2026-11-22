@@ -44,41 +44,75 @@ def upload_document(
     notes: str = Form("", max_length=1000),
     applicant: RegisteredUser = Depends(require_applicant),
 ):
-    filename = PureWindowsPath(file.filename or "").name.strip()
+    return store_documents([file], application, document_type, notes, applicant.id)[0]
+
+
+@router.post("/batch", status_code=201, response_model=list[DocumentSummary])
+def upload_batch(
+    files: list[UploadFile] = File(...),
+    application: str = Form("My application", min_length=1, max_length=120),
+    document_type: Literal["Transcript", "Degree certificate", "Language certificate", "Other"] = Form("Other"),
+    notes: str = Form("", max_length=1000),
+    applicant: RegisteredUser = Depends(require_applicant),
+):
+    return store_documents(files, application, document_type, notes, applicant.id)
+
+
+def store_documents(files, application, document_type, notes, applicant_id):
     title = application.strip()
     if not title:
         raise HTTPException(422, "Enter an application name")
-    content = file.file.read(MAX_BYTES + 1)
-    media_type = media_type_for(filename, content)
-
+    if not 1 <= len(files) <= 10:
+        raise HTTPException(422, "Choose between 1 and 10 files")
+    notes = notes.strip()
+    saved = []
     try:
         with psycopg.connect(connect_timeout=3) as connection:
+            # Serialize batches for this applicant, including overlapping batches
+            # that submit the same files in different orders.
+            connection.execute(
+                "SELECT id FROM users WHERE id = %s FOR NO KEY UPDATE", (applicant_id,)
+            )
             application_id = connection.execute(
                 """
                 INSERT INTO applications (applicant_id, title) VALUES (%s, %s)
                 ON CONFLICT (applicant_id, title) DO UPDATE SET title = EXCLUDED.title
                 RETURNING id
                 """,
-                (applicant.id, title),
+                (applicant_id, title),
             ).fetchone()[0]
-            row = connection.execute(
-                """
-                INSERT INTO documents (applicant_id, original_filename, pdf_content,
-                                       application_id, document_type, notes, media_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, original_filename, submitted_at, review_status
-                """,
-                (applicant.id, filename, content, application_id, document_type, notes.strip(), media_type),
-            ).fetchone()
+            for file in files:
+                filename = PureWindowsPath(file.filename or "").name.strip()
+                content = file.file.read(MAX_BYTES + 1)
+                try:
+                    media_type = media_type_for(filename, content)
+                except HTTPException as error:
+                    raise HTTPException(error.status_code, f"{filename}: {error.detail}") from error
+                row = connection.execute(
+                    """
+                    INSERT INTO documents (applicant_id, original_filename, pdf_content,
+                                           application_id, document_type, notes, media_type)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (applicant_id, sha256(pdf_content))
+                        WHERE NOT historical_duplicate DO NOTHING
+                    RETURNING id, original_filename, submitted_at, review_status
+                    """,
+                    (applicant_id, filename, content, application_id, document_type, notes, media_type),
+                ).fetchone()
+                if row is None:
+                    raise HTTPException(
+                        409,
+                        f"{filename}: duplicate file for this account or selection. "
+                        "No files from this upload were saved. Remove the duplicate and try again.",
+                    )
+                saved.append(DocumentSummary(
+                    id=row[0], original_filename=row[1],
+                    submitted_at=row[2], review_status=row[3],
+                ))
     except psycopg.OperationalError:
         raise HTTPException(503, "Database unavailable") from None
 
-    return DocumentSummary(
-        id=row[0],
-        original_filename=row[1],
-        submitted_at=row[2],
-        review_status=row[3],
-    )
+    return saved
 
 
 @router.get("", response_model=list[DocumentListItem])

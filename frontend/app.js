@@ -23,6 +23,7 @@ function showSignIn(message = "") {
   byId("register-panel").hidden = true;
   byId("switch-account").hidden = true;
   uploadForm.reset();
+  byId("pdf-file").disabled = false;
   documentList.replaceChildren();
   reviewQueue.replaceChildren();
   byId("account-email").textContent = "";
@@ -145,15 +146,56 @@ async function loadDocuments() {
   }
 }
 
+const filePicker = byId("pdf-file");
+const selection = byId("selected-files");
+
+function renderSelection() {
+  selection.replaceChildren();
+  const files = Array.from(filePicker.files);
+  if (!files.length) selection.textContent = "No files selected";
+  files.forEach((file, index) => {
+    const row = document.createElement("div");
+    row.className = "selected-row";
+    const name = document.createElement("span");
+    name.textContent = file.name;
+    if (file.size > MAX_FILE_BYTES) name.textContent += " — exceeds 5 MiB";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", "Remove " + file.name);
+    remove.addEventListener("click", () => {
+      const remaining = new DataTransfer();
+      Array.from(filePicker.files).forEach((entry, position) => {
+        if (position !== index) remaining.items.add(entry);
+      });
+      filePicker.files = remaining.files;
+      uploadMessage.textContent = "";
+      renderSelection();
+      const buttons = selection.querySelectorAll("button");
+      (buttons[Math.min(index, buttons.length - 1)] || filePicker).focus();
+    });
+    row.append(name, remove);
+    selection.append(row);
+  });
+}
+filePicker.addEventListener("change", () => {
+  uploadMessage.textContent = "";
+  renderSelection();
+});
+uploadForm.addEventListener("reset", () => {
+  byId("selected-files").textContent = "No files selected";
+});
+
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = byId("pdf-file").files[0];
-  if (!file || !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
-    uploadMessage.textContent = "Choose a PDF, JPG or PNG file.";
+  const files = Array.from(byId("pdf-file").files);
+  if (!files.length || files.length > 10) {
+    uploadMessage.textContent = "Choose between 1 and 10 files.";
     return;
   }
-  if (file.size > MAX_FILE_BYTES) {
-    uploadMessage.textContent = "Choose a file of 5 MiB or less.";
+  const invalid = files.find(file => !/\.(pdf|jpe?g|png)$/i.test(file.name) || file.size > MAX_FILE_BYTES);
+  if (invalid) {
+    uploadMessage.textContent = invalid.name + ": choose a PDF, JPG or PNG of 5 MiB or less.";
     return;
   }
 
@@ -163,12 +205,14 @@ uploadForm.addEventListener("submit", async (event) => {
   body.append("application", title);
   body.append("document_type", byId("document-type").value);
   body.append("notes", byId("document-notes").value);
-  body.append("file", file);
+  for (const file of files) body.append("files", file);
+  filePicker.disabled = true;
+  selection.querySelectorAll("button").forEach(button => { button.disabled = true; });
   byId("upload-button").disabled = true;
   uploadMessage.textContent = "Uploading…";
 
   try {
-    const response = await sessionFetch("/api/documents", token, { method: "POST", body });
+    const response = await sessionFetch("/api/documents/batch", token, { method: "POST", body });
     if (!response) return;
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -180,14 +224,18 @@ uploadForm.addEventListener("submit", async (event) => {
     }
     uploadForm.reset();
     byId("application-title").value = title;
-    uploadMessage.textContent = file.name + " uploaded.";
+    uploadMessage.textContent = files.length === 1 ? files[0].name + " uploaded." : files.length + " documents uploaded.";
     await loadDocuments();
   } catch {
     if (token === accessToken) {
       uploadMessage.textContent = "Connection interrupted. Check your list before uploading again.";
     }
   } finally {
-    if (token === accessToken) byId("upload-button").disabled = false;
+    if (token === accessToken) {
+      filePicker.disabled = false;
+      byId("upload-button").disabled = false;
+      renderSelection();
+    }
   }
 });
 
