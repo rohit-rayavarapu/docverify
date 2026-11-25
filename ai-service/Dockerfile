@@ -8,9 +8,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY extract.py .
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY extract.py service.py ./
 
 ENV XDG_CACHE_HOME=/tmp
 USER nobody
 
-ENTRYPOINT ["python", "/app/extract.py"]
+CMD ["python", "-m", "uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8081"]

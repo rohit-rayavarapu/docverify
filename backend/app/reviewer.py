@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from .documents import DocumentListItem, DocumentSummary
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Literal
-
+from .extraction import ExtractionResult, extract_review_document
 from pydantic import BaseModel
 
 from .login import current_user
@@ -128,3 +128,9 @@ def record_decision(
         submitted_at=row[2],
         review_status=row[3],
     )
+@router.post("/documents/{document_id}/extraction", response_model=ExtractionResult)
+def extract_document_for_review(
+    document_id: int,
+    reviewer: RegisteredUser = Depends(require_reviewer),
+):
+    return extract_review_document(document_id, reviewer.id)
