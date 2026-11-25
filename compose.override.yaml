@@ -1,0 +1,13 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+
+  ai-service:
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      CHAT_MODEL: "${CHAT_MODEL:-qwen2.5:3b}"
+
+volumes:
+  ollama_models:

@@ -12,7 +12,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY extract.py service.py ./
+COPY extract.py service.py classifier.py ./
+COPY prompts/ ./prompts/
 
 ENV XDG_CACHE_HOME=/tmp
 USER nobody
