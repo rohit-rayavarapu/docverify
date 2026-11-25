@@ -20,6 +20,19 @@ services:
     depends_on:
       - backend
 
+  ai-service:
+    build: ./ai-service
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2).close()"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
   db:
     image: postgres:16
     environment:
